@@ -1,4 +1,4 @@
-export type Source = 'CDC' | 'WHO' | 'ProMED' | 'ReliefWeb';
+export type Source = 'CDC' | 'WHO' | 'ProMED' | 'ReliefWeb' | 'PAHO' | 'OutbreakNews';
 export type Severity = 'high' | 'medium' | 'low';
 
 export interface Signal {

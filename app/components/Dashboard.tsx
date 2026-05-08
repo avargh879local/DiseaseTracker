@@ -446,7 +446,7 @@ export default function Dashboard({ initialData }: { initialData: SignalsRespons
           <FilterBar
             filters={filters}
             onChange={setFilters}
-            sourceStatus={data?.sourceStatus ?? { CDC: 'ok', WHO: 'ok', ProMED: 'ok', ReliefWeb: 'ok' }}
+            sourceStatus={data?.sourceStatus ?? { CDC: 'ok', WHO: 'ok', ProMED: 'ok', ReliefWeb: 'ok', PAHO: 'ok', OutbreakNews: 'ok' }}
           />
         </div>
 
@@ -500,7 +500,7 @@ export default function Dashboard({ initialData }: { initialData: SignalsRespons
               SENTINEL v3.0 · Community Disease Intelligence Network
             </span>
             <span className="text-[9px] font-mono text-slate-800">
-              CDC · PAHO · ProMED · ReliefWeb
+              CDC · WHO · PAHO · ProMED · ReliefWeb · OutbreakNews
             </span>
           </div>
         </footer>

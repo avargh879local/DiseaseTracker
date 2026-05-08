@@ -23,11 +23,12 @@ const SEV_BORDER: Record<Severity, string> = {
 };
 
 const SOURCE_COLOR: Record<string, string> = {
-  CDC:       'text-blue-300   bg-blue-500/10   border-blue-500/25',
-  WHO:       'text-purple-300 bg-purple-500/10 border-purple-500/25',
-  ProMED:    'text-orange-300 bg-orange-500/10 border-orange-500/25',
-  ReliefWeb: 'text-teal-300   bg-teal-500/10   border-teal-500/25',
-  PAHO:      'text-sky-300    bg-sky-500/10    border-sky-500/25',
+  CDC:          'text-blue-300   bg-blue-500/10   border-blue-500/25',
+  WHO:          'text-purple-300 bg-purple-500/10 border-purple-500/25',
+  ProMED:       'text-orange-300 bg-orange-500/10 border-orange-500/25',
+  ReliefWeb:    'text-teal-300   bg-teal-500/10   border-teal-500/25',
+  PAHO:         'text-sky-300    bg-sky-500/10    border-sky-500/25',
+  OutbreakNews: 'text-rose-300   bg-rose-500/10   border-rose-500/25',
 };
 
 function safeTime(iso: string) {

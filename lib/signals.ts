@@ -706,36 +706,72 @@ async function fetchReliefWeb(): Promise<FeedResult> {
   }
 }
 
+async function fetchPAHO(): Promise<FeedResult> {
+  try {
+    const xml = await fetchText('https://www.paho.org/en/rss.xml', 'application/rss+xml, application/xml');
+    const feed = await parser.parseString(xml);
+    const signals = (feed.items || [])
+      .slice(0, 20)
+      .map((item, index) => normalizeRssItem('PAHO' as Source, index, item, 'https://www.paho.org/'));
+    return { signals, ok: signals.length > 0 };
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    console.error('[SENTINEL] PAHO feed error:', message);
+    return { signals: [], ok: false, error: message };
+  }
+}
+
+async function fetchOutbreakNews(): Promise<FeedResult> {
+  try {
+    const xml = await fetchText('https://outbreaknewstoday.com/feed/', 'application/rss+xml, application/xml');
+    const feed = await parser.parseString(xml);
+    const signals = (feed.items || [])
+      .slice(0, 20)
+      .map((item, index) => normalizeRssItem('OutbreakNews' as Source, index, item, 'https://outbreaknewstoday.com/'));
+    return { signals, ok: signals.length > 0 };
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    console.error('[SENTINEL] OutbreakNews feed error:', message);
+    return { signals: [], ok: false, error: message };
+  }
+}
+
 export async function fetchAllSignals(): Promise<SignalsResponse> {
-  const [cdcR, whoR, promedR, reliefwebR] = await Promise.allSettled([
+  const [cdcR, whoR, promedR, reliefwebR, pahoR, outbreakR] = await Promise.allSettled([
     fetchCDC(),
     fetchWHO(),
     fetchProMED(),
     fetchReliefWeb(),
+    fetchPAHO(),
+    fetchOutbreakNews(),
   ]);
 
-  const cdc = cdcR.status === 'fulfilled' ? cdcR.value : { signals: [], ok: false };
-  const who = whoR.status === 'fulfilled' ? whoR.value : { signals: [], ok: false };
-  const promed = promedR.status === 'fulfilled' ? promedR.value : { signals: [], ok: false };
-  const reliefweb = reliefwebR.status === 'fulfilled'
-    ? reliefwebR.value
-    : { signals: [], ok: false };
+  const cdc        = cdcR.status       === 'fulfilled' ? cdcR.value       : { signals: [], ok: false };
+  const who        = whoR.status       === 'fulfilled' ? whoR.value       : { signals: [], ok: false };
+  const promed     = promedR.status    === 'fulfilled' ? promedR.value    : { signals: [], ok: false };
+  const reliefweb  = reliefwebR.status === 'fulfilled' ? reliefwebR.value : { signals: [], ok: false };
+  const paho       = pahoR.status      === 'fulfilled' ? pahoR.value      : { signals: [], ok: false };
+  const outbreakNews = outbreakR.status === 'fulfilled' ? outbreakR.value : { signals: [], ok: false };
 
   const allSignals = [
     ...cdc.signals,
     ...who.signals,
     ...promed.signals,
     ...reliefweb.signals,
+    ...paho.signals,
+    ...outbreakNews.signals,
   ].sort((a, b) => new Date(b.publishedAt).getTime() - new Date(a.publishedAt).getTime());
 
   return {
     signals: allSignals,
     lastUpdated: new Date().toISOString(),
     sourceStatus: {
-      CDC: cdc.ok ? 'ok' : 'error',
-      WHO: who.ok ? 'ok' : 'error',
-      ProMED: promed.ok ? 'ok' : 'error',
-      ReliefWeb: reliefweb.ok ? 'ok' : 'error',
+      CDC:          cdc.ok          ? 'ok' : 'error',
+      WHO:          who.ok          ? 'ok' : 'error',
+      ProMED:       promed.ok       ? 'ok' : 'error',
+      ReliefWeb:    reliefweb.ok    ? 'ok' : 'error',
+      PAHO:         paho.ok         ? 'ok' : 'error',
+      OutbreakNews: outbreakNews.ok ? 'ok' : 'error',
     },
   };
 }

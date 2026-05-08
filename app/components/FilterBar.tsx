@@ -14,7 +14,7 @@ interface FilterBarProps {
   sourceStatus: Record<Source, 'ok' | 'error'>;
 }
 
-const SOURCES: (Source | 'all')[] = ['all', 'CDC', 'WHO', 'ProMED', 'ReliefWeb'];
+const SOURCES: (Source | 'all')[] = ['all', 'CDC', 'WHO', 'PAHO', 'ProMED', 'ReliefWeb', 'OutbreakNews'];
 
 const SEVERITIES: { value: Severity | 'all'; label: string; activeColor: string }[] = [
   { value: 'all', label: 'All', activeColor: '#22d3ee' },
