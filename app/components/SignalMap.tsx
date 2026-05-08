@@ -28,18 +28,16 @@ interface Cluster {
   signals: Signal[];
 }
 
-const SEVERITY_WEIGHT: Record<Severity, number> = {
-  high: 18,
-  medium: 9,
-  low: 3,
-};
+const SEVERITY_WEIGHT: Record<Severity, number> = { high: 18, medium: 9, low: 3 };
 
 const MAP_COLORS = {
-  high: { color: '#ef4444', glow: 'rgba(239, 68, 68, 0.45)', progress: 'surging' },
-  medium: { color: '#f59e0b', glow: 'rgba(245, 158, 11, 0.42)', progress: 'rising' },
-  low: { color: '#22c55e', glow: 'rgba(34, 197, 94, 0.34)', progress: 'watch' },
+  high:   { color: '#ef4444', glow: 'rgba(239,68,68,0.45)',   progress: 'surging' },
+  medium: { color: '#f59e0b', glow: 'rgba(245,158,11,0.42)',  progress: 'rising'  },
+  low:    { color: '#22c55e', glow: 'rgba(34,197,94,0.34)',   progress: 'watch'   },
 };
 
+// Equirectangular: x = (lon+180)/360 * W,  y = (90-lat)/180 * H
+// SVG viewBox is 1000 × 500 so scale factor = 10 for x, 500/180 ≈ 2.778 for y
 function project(lon: number, lat: number) {
   return {
     x: ((lon + 180) / 360) * 100,
@@ -47,28 +45,34 @@ function project(lon: number, lat: number) {
   };
 }
 
+// Same projection scaled to SVG viewBox 1000×500
+function svgPt(lon: number, lat: number): string {
+  const x = Math.round(((lon + 180) / 360) * 1000);
+  const y = Math.round(((90 - lat) / 180) * 500);
+  return `${x},${y}`;
+}
+
+function pts(...pairs: [number, number][]): string {
+  return 'M' + pairs.map(([lo, la]) => svgPt(lo, la)).join(' L') + ' Z';
+}
+
 function safeDate(iso: string) {
-  try {
-    return parseISO(iso);
-  } catch {
-    return new Date(0);
-  }
+  try { return parseISO(iso); } catch { return new Date(0); }
 }
 
 function clusterSeverity(signals: Signal[]): Severity {
-  if (signals.some((signal) => signal.severity === 'high')) return 'high';
-  if (signals.some((signal) => signal.severity === 'medium')) return 'medium';
+  if (signals.some(s => s.severity === 'high')) return 'high';
+  if (signals.some(s => s.severity === 'medium')) return 'medium';
   return 'low';
 }
 
 function computePressure(signals: Signal[], recentCount: number, caseCount: number, deathCount: number) {
-  const severityPressure = signals.reduce((sum, signal) => sum + SEVERITY_WEIGHT[signal.severity], 0);
-  const reportPressure = signals.length * 5;
-  const recentPressure = recentCount * 8;
-  const casePressure = caseCount > 0 ? Math.log10(caseCount + 1) * 12 : 0;
-  const deathPressure = deathCount > 0 ? Math.log10(deathCount + 1) * 18 : 0;
-
-  return Math.round(severityPressure + reportPressure + recentPressure + casePressure + deathPressure);
+  const sev  = signals.reduce((s, sig) => s + SEVERITY_WEIGHT[sig.severity], 0);
+  const rep  = signals.length * 5;
+  const rec  = recentCount * 8;
+  const cas  = caseCount  > 0 ? Math.log10(caseCount  + 1) * 12 : 0;
+  const dth  = deathCount > 0 ? Math.log10(deathCount + 1) * 18 : 0;
+  return Math.round(sev + rep + rec + cas + dth);
 }
 
 function formatCount(value: number) {
@@ -77,7 +81,7 @@ function formatCount(value: number) {
 }
 
 function buildClusters(signals: Signal[]): Cluster[] {
-  const now = new Date();
+  const now    = new Date();
   const groups = new Map<string, Signal[]>();
 
   for (const signal of signals) {
@@ -90,178 +94,261 @@ function buildClusters(signals: Signal[]): Cluster[] {
     groups.set(key, [...(groups.get(key) || []), signal]);
   }
 
-  const baseClusters = Array.from(groups.entries()).map(([id, items]) => {
-    const representative = items[0];
-    const severity = clusterSeverity(items);
-    const recentCount = items.filter((signal) => isAfter(safeDate(signal.publishedAt), subHours(now, 24))).length;
-    const caseCount = Math.max(0, ...items.map((signal) => signal.caseCount || 0));
-    const deathCount = Math.max(0, ...items.map((signal) => signal.deathCount || 0));
-    const pressure = computePressure(items, recentCount, caseCount, deathCount);
-    const size = Math.min(58, 12 + Math.sqrt(pressure) * 3.4);
+  const base = Array.from(groups.entries()).map(([id, items]) => {
+    const rep        = items[0];
+    const severity   = clusterSeverity(items);
+    const recentCount = items.filter(s => isAfter(safeDate(s.publishedAt), subHours(now, 24))).length;
+    const caseCount  = Math.max(0, ...items.map(s => s.caseCount  || 0));
+    const deathCount = Math.max(0, ...items.map(s => s.deathCount || 0));
+    const pressure   = computePressure(items, recentCount, caseCount, deathCount);
+    const size       = Math.min(58, 12 + Math.sqrt(pressure) * 3.4);
     const colorKey: Severity =
-      severity === 'high' || deathCount > 0 || pressure >= 58
-        ? 'high'
-        : severity === 'medium' || items.length > 1 || caseCount >= 25 || pressure >= 30
-          ? 'medium'
-          : 'low';
-    const projected = project(representative.coordinates.lon, representative.coordinates.lat);
-    const latestAt = items
-      .map((signal) => signal.publishedAt)
-      .sort((a, b) => safeDate(b).getTime() - safeDate(a).getTime())[0];
+      severity === 'high' || deathCount > 0 || pressure >= 58   ? 'high'   :
+      severity === 'medium' || items.length > 1 || pressure >= 30 ? 'medium' : 'low';
+    const proj    = project(rep.coordinates.lon, rep.coordinates.lat);
+    const latestAt = items.map(s => s.publishedAt).sort((a, b) => safeDate(b).getTime() - safeDate(a).getTime())[0];
 
     return {
-      id,
-      disease: representative.disease,
-      location: representative.location,
-      region: representative.region,
-      lat: representative.coordinates.lat,
-      lon: representative.coordinates.lon,
-      x: projected.x,
-      y: projected.y,
-      reportCount: items.length,
-      recentCount,
-      caseCount,
-      deathCount,
-      severity: colorKey,
-      pressure,
-      size,
-      color: MAP_COLORS[colorKey].color,
-      glow: MAP_COLORS[colorKey].glow,
+      id, disease: rep.disease, location: rep.location, region: rep.region,
+      lat: rep.coordinates.lat, lon: rep.coordinates.lon,
+      x: proj.x, y: proj.y,
+      reportCount: items.length, recentCount, caseCount, deathCount,
+      severity: colorKey, pressure, size,
+      color: MAP_COLORS[colorKey].color, glow: MAP_COLORS[colorKey].glow,
       progress: pressure >= 58 || recentCount >= 3 ? 'surging' : MAP_COLORS[colorKey].progress,
-      sources: Array.from(new Set(items.map((signal) => signal.source))),
-      latestAt,
-      signals: items,
+      sources: Array.from(new Set(items.map(s => s.source))),
+      latestAt, signals: items,
     };
   });
 
-  const locationOffsets = new Map<string, number>();
-
-  return baseClusters
+  const offsets = new Map<string, number>();
+  return base
     .sort((a, b) => b.pressure - a.pressure)
-    .slice(0, 32)
-    .map((cluster) => {
-      const locationKey = `${Math.round(cluster.lat * 4) / 4}|${Math.round(cluster.lon * 4) / 4}`;
-      const offsetIndex = locationOffsets.get(locationKey) || 0;
-      locationOffsets.set(locationKey, offsetIndex + 1);
-
-      if (offsetIndex === 0) return cluster;
-
-      const angle = offsetIndex * 2.399963;
-      const radius = Math.min(4.5, 1.5 + offsetIndex * 0.65);
+    .slice(0, 35)
+    .map(cluster => {
+      const key   = `${Math.round(cluster.lat * 4) / 4}|${Math.round(cluster.lon * 4) / 4}`;
+      const idx   = offsets.get(key) || 0;
+      offsets.set(key, idx + 1);
+      if (idx === 0) return cluster;
+      const angle  = idx * 2.399963;
+      const radius = Math.min(4.5, 1.5 + idx * 0.65);
       return {
         ...cluster,
-        x: Math.max(4, Math.min(96, cluster.x + Math.cos(angle) * radius)),
-        y: Math.max(7, Math.min(92, cluster.y + Math.sin(angle) * radius)),
+        x: Math.max(3, Math.min(97, cluster.x + Math.cos(angle) * radius)),
+        y: Math.max(6, Math.min(93, cluster.y + Math.sin(angle) * radius)),
       };
     });
 }
 
+// ── Geographically accurate landmass paths in equirectangular projection ──
+// All paths derived from (lon, lat) → x=(lon+180)/360*1000, y=(90-lat)/180*500
 function WorldMapShape() {
+  const northAmerica = pts(
+    [-170,68],[-168,56],[-155,58],[-140,59],[-130,52],[-125,48],
+    [-124,43],[-117,32],[-110,22],[-87,15], [-79,8], [-76,15],
+    [-80,25], [-74,41],[-68,45], [-52,47], [-54,60],[-64,64],
+    [-90,68], [-120,70],[-141,71]
+  );
+
+  const southAmerica = pts(
+    [-80,12],[-77,7], [-73,2], [-70,-5],[-72,-15],[-75,-28],
+    [-72,-42],[-68,-55],[-63,-55],[-56,-40],[-50,-28],[-40,-20],
+    [-35,-8], [-38,0], [-50,5], [-60,10],[-72,12]
+  );
+
+  // Eurasia: Europe → Russia → Central/South/East Asia → SE Asia → back
+  const eurasia = pts(
+    [-10,36],[2,51], [10,54],[18,55],[29,62],[29,70],[30,72],
+    [40,68], [60,68],[80,73],[105,77],[140,73],[141,68],[145,63],
+    [140,55],[135,48],[132,44],[130,32],[131,13],[124,-3],[117,-8],
+    [110,-8],[100,1], [97,8], [85,20],[80,14],[77,8], [73,22],
+    [60,22], [50,26],[38,27],[38,37],[26,40],[10,37],[-6,36]
+  );
+
+  const africa = pts(
+    [-18,34],[-6,36],[10,37],[20,30],[32,30],[43,11],[51,12],
+    [50,2],  [42,-12],[38,-25],[32,-34],[18,-35],[13,-29],[12,-18],
+    [12,-5], [10,4],  [3,6],  [-1,5], [-5,5], [-10,7],[-17,14]
+  );
+
+  const australia = pts(
+    [114,-22],[123,-15],[135,-14],[148,-18],[153,-24],
+    [151,-33],[138,-36],[130,-32],[117,-36],[115,-31]
+  );
+
+  const greenland = pts(
+    [-50,60],[-28,60],[-18,75],[-30,83],[-50,83],[-60,75]
+  );
+
+  // Continent label positions [lon, lat, label]
+  const labels: [number, number, string][] = [
+    [-100, 48,  'N. AMERICA'],
+    [-60,  -20, 'S. AMERICA'],
+    [20,   52,  'EUROPE'],
+    [20,   5,   'AFRICA'],
+    [90,   45,  'ASIA'],
+    [134,  -28, 'AUSTRALIA'],
+  ];
+
   return (
     <svg className="absolute inset-0 h-full w-full" viewBox="0 0 1000 500" aria-hidden="true">
       <defs>
-        <linearGradient id="mapLand" x1="0" x2="1" y1="0" y2="1">
-          <stop offset="0%" stopColor="#143554" stopOpacity="0.52" />
-          <stop offset="100%" stopColor="#0c2039" stopOpacity="0.78" />
+        <linearGradient id="landGrad" x1="0" x2="0" y1="0" y2="1">
+          <stop offset="0%"   stopColor="#0e2a45" stopOpacity="0.8" />
+          <stop offset="100%" stopColor="#081929" stopOpacity="0.9" />
         </linearGradient>
+        <filter id="landGlow">
+          <feGaussianBlur stdDeviation="1.5" result="blur" />
+          <feMerge><feMergeNode in="blur"/><feMergeNode in="SourceGraphic"/></feMerge>
+        </filter>
       </defs>
-      <g fill="none" stroke="#12314f" strokeOpacity="0.48" strokeWidth="1">
-        {Array.from({ length: 11 }).map((_, index) => (
-          <line key={`v-${index}`} x1={index * 100} x2={index * 100} y1="0" y2="500" />
+
+      {/* Graticule grid */}
+      <g stroke="#22d3ee" strokeOpacity="0.06" strokeWidth="0.7">
+        {[-60,-30,0,30,60].map(lat => (
+          <line key={lat}
+            x1="0" x2="1000"
+            y1={((90 - lat) / 180) * 500}
+            y2={((90 - lat) / 180) * 500}
+          />
         ))}
-        {Array.from({ length: 6 }).map((_, index) => (
-          <line key={`h-${index}`} x1="0" x2="1000" y1={index * 100} y2={index * 100} />
+        {[-150,-120,-90,-60,-30,0,30,60,90,120,150].map(lon => (
+          <line key={lon}
+            x1={((lon + 180) / 360) * 1000} x2={((lon + 180) / 360) * 1000}
+            y1="0" y2="500"
+          />
         ))}
       </g>
-      <g fill="url(#mapLand)" stroke="#1d5a7a" strokeOpacity="0.48" strokeWidth="1.2">
-        <path d="M91 158 138 103 219 86 300 106 348 157 319 205 274 229 253 279 201 275 154 238 96 224 61 186Z" />
-        <path d="M217 282 270 302 317 351 303 422 267 477 235 417 220 347Z" />
-        <path d="M409 121 455 98 512 117 528 158 494 184 432 176 395 151Z" />
-        <path d="M459 198 536 202 579 260 559 336 513 421 461 360 437 284Z" />
-        <path d="M548 142 633 95 760 116 866 167 843 227 748 235 706 287 633 267 582 220 523 196Z" />
-        <path d="M761 318 842 343 885 404 817 430 744 397Z" />
-        <path d="M327 67 382 44 438 64 410 98 349 102Z" />
-        <path d="M889 250 925 266 945 307 915 322 878 292Z" />
+
+      {/* Equator highlight */}
+      <line x1="0" x2="1000" y1="250" y2="250"
+        stroke="#22d3ee" strokeOpacity="0.15" strokeDasharray="6 10" strokeWidth="1" />
+
+      {/* Landmasses */}
+      <g fill="url(#landGrad)" stroke="#1e4d6b" strokeOpacity="0.6" strokeWidth="1" filter="url(#landGlow)">
+        <path d={northAmerica} />
+        <path d={southAmerica} />
+        <path d={eurasia} />
+        <path d={africa} />
+        <path d={australia} />
+        <path d={greenland} />
       </g>
-      <path d="M0 250H1000" stroke="#22d3ee" strokeDasharray="4 10" strokeOpacity="0.12" />
+
+      {/* Continent labels */}
+      {labels.map(([lon, lat, label]) => {
+        const x = ((lon + 180) / 360) * 1000;
+        const y = ((90 - lat)  / 180) * 500;
+        return (
+          <text key={label} x={x} y={y} textAnchor="middle"
+            fill="#22d3ee" fillOpacity="0.18" fontSize="13"
+            fontFamily="monospace" letterSpacing="2" fontWeight="bold"
+          >
+            {label}
+          </text>
+        );
+      })}
     </svg>
   );
 }
 
 export default function SignalMap({ signals }: { signals: Signal[] }) {
-  const clusters = useMemo(() => buildClusters(signals), [signals]);
+  const clusters  = useMemo(() => buildClusters(signals), [signals]);
   const [selectedId, setSelectedId] = useState<string | null>(null);
-  const selected = clusters.find((cluster) => cluster.id === selectedId) || clusters[0];
+  const selected  = clusters.find(c => c.id === selectedId) || clusters[0];
 
-  if (clusters.length === 0) {
-    return null;
-  }
+  if (clusters.length === 0) return null;
 
   return (
-    <section className="grid gap-4 xl:grid-cols-[minmax(0,1fr)_340px]">
+    <section className="grid gap-4 xl:grid-cols-[minmax(0,1fr)_320px]">
+      {/* ── Map canvas ── */}
       <div
         className="relative overflow-hidden rounded-md"
         style={{
-          background: 'linear-gradient(135deg, rgba(6, 15, 32, 0.96), rgba(9, 25, 45, 0.94))',
+          background: 'linear-gradient(135deg,rgba(5,15,30,0.97),rgba(8,22,42,0.95))',
           border: '1px solid #1a3352',
-          boxShadow: '0 0 45px rgba(34, 211, 238, 0.08)',
+          boxShadow: '0 0 50px rgba(34,211,238,0.07)',
         }}
       >
-        <div className="flex flex-col gap-3 border-b border-slate-800/80 p-4 sm:flex-row sm:items-center sm:justify-between">
+        {/* Header */}
+        <div className="flex flex-col gap-2 border-b border-slate-800/70 p-3 sm:flex-row sm:items-center sm:justify-between">
           <div>
-            <div className="text-[9px] font-mono uppercase text-slate-600">
-              Geospatial signal field
-            </div>
-            <h2 className="font-mono text-lg font-bold uppercase text-cyan-300">
-              World Disease Map
+            <p className="text-[9px] font-mono uppercase tracking-widest text-slate-600">
+              Geospatial Signal Field · Equirectangular
+            </p>
+            <h2 className="font-mono text-base font-bold uppercase text-cyan-300">
+              Global Disease Map
             </h2>
           </div>
-          <div className="flex flex-wrap items-center gap-2 text-[10px] font-mono uppercase text-slate-500">
-            <span className="inline-flex items-center gap-1.5">
-              <span className="h-2 w-2 rounded-full bg-green-500" /> watch
-            </span>
-            <span className="inline-flex items-center gap-1.5">
-              <span className="h-2 w-2 rounded-full bg-amber-500" /> rising
-            </span>
-            <span className="inline-flex items-center gap-1.5">
-              <span className="h-2 w-2 rounded-full bg-red-500" /> surging
-            </span>
+          <div className="flex flex-wrap gap-3 text-[10px] font-mono uppercase text-slate-500">
+            {(['watch','rising','surging'] as const).map(s => (
+              <span key={s} className="flex items-center gap-1.5">
+                <span className={`h-2 w-2 rounded-full ${
+                  s === 'watch' ? 'bg-green-500' : s === 'rising' ? 'bg-amber-500' : 'bg-red-500'
+                }`} />
+                {s}
+              </span>
+            ))}
+            <span className="text-slate-700">·</span>
+            <span className="text-slate-600">{clusters.length} clusters</span>
           </div>
         </div>
 
-        <div className="relative min-h-[360px] overflow-hidden sm:min-h-[430px]">
-          <div className="absolute inset-0 bg-[radial-gradient(circle_at_50%_45%,rgba(34,211,238,0.08),transparent_45%)]" />
+        {/* Map area */}
+        <div className="relative" style={{ minHeight: 380, height: '100%' }}>
+          {/* Ocean radial glow */}
+          <div className="absolute inset-0 bg-[radial-gradient(ellipse_60%_50%_at_50%_45%,rgba(34,211,238,0.06),transparent)]" />
+
           <WorldMapShape />
 
-          {clusters.map((cluster) => (
+          {/* Heatmap glow layer — large radial glows behind bubbles, overlapping creates density heat */}
+          {clusters.map(cluster => (
+            <div
+              key={`heat-${cluster.id}`}
+              className="absolute -translate-x-1/2 -translate-y-1/2 rounded-full pointer-events-none"
+              style={{
+                left:   `${cluster.x}%`,
+                top:    `${cluster.y}%`,
+                width:  cluster.size * 5,
+                height: cluster.size * 5,
+                background: `radial-gradient(circle, ${cluster.glow} 0%, transparent 70%)`,
+                opacity: cluster.progress === 'surging' ? 0.55 : cluster.progress === 'rising' ? 0.38 : 0.22,
+                zIndex: 1,
+              }}
+            />
+          ))}
+
+          {clusters.map(cluster => (
             <button
               key={cluster.id}
               type="button"
-              aria-label={`${cluster.disease} in ${cluster.location}: ${cluster.reportCount} ${cluster.reportCount === 1 ? 'report' : 'reports'}`}
-              title={`${cluster.disease} / ${cluster.location}`}
+              aria-label={`${cluster.disease} in ${cluster.location}`}
               onClick={() => setSelectedId(cluster.id)}
               onMouseEnter={() => setSelectedId(cluster.id)}
-              className="absolute -translate-x-1/2 -translate-y-1/2 rounded-full border transition-transform duration-150 hover:z-20 hover:scale-110 focus:outline-none focus:ring-2 focus:ring-cyan-300"
+              className="absolute -translate-x-1/2 -translate-y-1/2 rounded-full border transition-all duration-150 hover:z-20 hover:scale-110 focus:outline-none"
               style={{
                 left: `${cluster.x}%`,
-                top: `${cluster.y}%`,
-                width: cluster.size,
+                top:  `${cluster.y}%`,
+                width:  cluster.size,
                 height: cluster.size,
-                background: `${cluster.color}2b`,
+                background:  `${cluster.color}25`,
                 borderColor: cluster.color,
-                boxShadow: `0 0 ${cluster.size}px ${cluster.glow}, inset 0 0 18px ${cluster.glow}`,
-                zIndex: Math.min(50, Math.max(1, Math.round(cluster.pressure / 8))),
+                borderWidth: selectedId === cluster.id ? 2 : 1,
+                boxShadow: `0 0 ${Math.round(cluster.size * 0.9)}px ${cluster.glow}, inset 0 0 16px ${cluster.glow}`,
+                zIndex: selectedId === cluster.id ? 30 : Math.min(20, Math.max(1, Math.round(cluster.pressure / 10))),
               }}
             >
+              {/* Pulse ring */}
               <span
-                className="absolute inset-[-45%] rounded-full"
+                className="absolute rounded-full"
                 style={{
+                  inset: '-40%',
                   border: `1px solid ${cluster.color}`,
-                  opacity: cluster.progress === 'watch' ? 0.16 : 0.42,
+                  opacity: cluster.progress === 'watch' ? 0.14 : 0.38,
                   animation: `map-pulse ${cluster.progress === 'surging' ? 1.4 : 2.6}s ease-out infinite`,
                 }}
               />
-              <span className="relative flex h-full w-full items-center justify-center rounded-full font-mono text-[10px] font-bold text-white">
+              {/* Report count */}
+              <span className="relative flex h-full w-full items-center justify-center font-mono text-[10px] font-bold text-white">
                 {cluster.reportCount}
               </span>
             </button>
@@ -269,106 +356,98 @@ export default function SignalMap({ signals }: { signals: Signal[] }) {
         </div>
       </div>
 
+      {/* ── Detail panel ── */}
       <aside
-        className="rounded-md p-4"
+        className="rounded-md flex flex-col"
         style={{
-          background: 'linear-gradient(135deg, #0a1628 0%, #0d1f38 100%)',
+          background: 'linear-gradient(135deg,#0a1628,#0d1f38)',
           border: '1px solid #1a3352',
         }}
       >
-        {selected && (
-          <>
-            <div className="mb-4 flex items-start justify-between gap-3">
-              <div>
-                <div className="text-[9px] font-mono uppercase text-slate-600">
-                  Selected cluster
-                </div>
-                <h3 className="mt-1 font-mono text-base font-bold uppercase leading-snug text-slate-100">
+        {selected ? (
+          <div className="flex flex-col gap-4 p-4 overflow-y-auto h-full">
+            {/* Header */}
+            <div className="flex items-start justify-between gap-3">
+              <div className="min-w-0">
+                <p className="text-[9px] font-mono uppercase tracking-widest text-slate-600 mb-0.5">
+                  Cluster · {selected.sources.join(' · ')}
+                </p>
+                <h3 className="font-mono text-sm font-bold uppercase leading-tight text-slate-100 mb-1">
                   {selected.disease}
                 </h3>
-                <div className="mt-1 text-xs font-mono text-slate-500">
-                  {selected.location} · {selected.region}
-                </div>
+                <p className="text-[11px] font-mono text-slate-500">
+                  {selected.location} &middot; {selected.region}
+                </p>
               </div>
-              <div
-                className="rounded px-2 py-1 text-[10px] font-mono font-bold uppercase"
+              <span
+                className="flex-shrink-0 rounded px-2 py-0.5 text-[10px] font-mono font-bold uppercase"
                 style={{
-                  color: selected.color,
+                  color:      selected.color,
                   background: `${selected.color}18`,
-                  border: `1px solid ${selected.color}55`,
+                  border:     `1px solid ${selected.color}50`,
                 }}
               >
                 {selected.progress}
-              </div>
+              </span>
             </div>
 
+            {/* Stats grid */}
             <div className="grid grid-cols-2 gap-2">
-              {[
+              {([
                 ['Reports', selected.reportCount],
-                ['24h', selected.recentCount],
+                ['Past 24h', selected.recentCount],
                 ['Cases', formatCount(selected.caseCount)],
                 ['Deaths', formatCount(selected.deathCount)],
-              ].map(([label, value]) => (
-                <div key={label} className="rounded border border-slate-800 bg-slate-950/35 p-3">
-                  <div className="text-[9px] font-mono uppercase text-slate-600">{label}</div>
-                  <div className="mt-1 font-mono text-lg font-bold text-slate-100">{value}</div>
+              ] as [string, string | number][]).map(([label, value]) => (
+                <div key={label} className="rounded border border-slate-800 bg-slate-950/40 p-3">
+                  <p className="text-[9px] font-mono uppercase text-slate-600 mb-1">{label}</p>
+                  <p className="font-mono text-lg font-bold text-slate-100">{value}</p>
                 </div>
               ))}
             </div>
 
-            <div className="mt-4 space-y-2 border-t border-slate-800 pt-4">
-              <div className="flex items-center justify-between text-[10px] font-mono uppercase text-slate-600">
-                <span>Pressure</span>
+            {/* Pressure bar */}
+            <div className="space-y-1.5">
+              <div className="flex justify-between text-[9px] font-mono uppercase text-slate-600">
+                <span>Threat Pressure</span>
                 <span style={{ color: selected.color }}>{selected.pressure}</span>
               </div>
-              <div className="h-2 overflow-hidden rounded-full bg-slate-950">
+              <div className="h-1.5 overflow-hidden rounded-full bg-slate-900">
                 <div
-                  className="h-full rounded-full"
+                  className="h-full rounded-full transition-all duration-700"
                   style={{
                     width: `${Math.min(100, selected.pressure)}%`,
-                    background: `linear-gradient(90deg, #22c55e, #f59e0b, ${selected.color})`,
-                    boxShadow: `0 0 14px ${selected.glow}`,
+                    background: `linear-gradient(90deg,#22c55e,#f59e0b,${selected.color})`,
+                    boxShadow: `0 0 12px ${selected.glow}`,
                   }}
                 />
               </div>
-              <div className="text-[11px] leading-relaxed text-slate-500">
-                Reports · cases · deaths weighted
-              </div>
             </div>
 
-            <div className="mt-4 border-t border-slate-800 pt-4">
-              <div className="mb-2 text-[9px] font-mono uppercase text-slate-600">Source mix</div>
-              <div className="flex flex-wrap gap-1.5">
-                {selected.sources.map((source) => (
-                  <span
-                    key={source}
-                    className="rounded border border-cyan-500/25 bg-cyan-500/10 px-2 py-1 text-[10px] font-mono uppercase text-cyan-300"
-                  >
-                    {source}
-                  </span>
-                ))}
-              </div>
-            </div>
-
-            <div className="mt-4 border-t border-slate-800 pt-4">
-              <div className="mb-2 text-[9px] font-mono uppercase text-slate-600">
-                Latest report · {formatDistanceToNow(safeDate(selected.latestAt), { addSuffix: true })}
-              </div>
-              <div className="space-y-2">
-                {selected.signals.slice(0, 3).map((signal) => (
+            {/* Latest signals */}
+            <div className="border-t border-slate-800 pt-3">
+              <p className="text-[9px] font-mono uppercase text-slate-600 mb-2">
+                Latest · {formatDistanceToNow(safeDate(selected.latestAt), { addSuffix: true })}
+              </p>
+              <div className="space-y-1.5">
+                {selected.signals.slice(0, 4).map(sig => (
                   <a
-                    key={signal.id}
-                    href={signal.url}
+                    key={sig.id}
+                    href={sig.url}
                     target="_blank"
                     rel="noopener noreferrer"
-                    className="block rounded border border-slate-800 bg-slate-950/35 p-2 text-[11px] leading-snug text-slate-400 transition-colors hover:border-cyan-500/40 hover:text-cyan-200"
+                    className="block rounded border border-slate-800 bg-slate-950/40 p-2 text-[11px] leading-snug text-slate-400 transition-colors hover:border-cyan-500/40 hover:text-cyan-200"
                   >
-                    {signal.title}
+                    {sig.title.length > 90 ? sig.title.slice(0, 90) + '…' : sig.title}
                   </a>
                 ))}
               </div>
             </div>
-          </>
+          </div>
+        ) : (
+          <div className="flex flex-1 items-center justify-center text-slate-700 font-mono text-sm p-8 text-center">
+            Hover a circle to inspect a cluster
+          </div>
         )}
       </aside>
     </section>
