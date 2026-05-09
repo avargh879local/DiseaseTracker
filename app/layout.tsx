@@ -45,21 +45,12 @@ export const metadata: Metadata = {
     siteName: 'SENTINEL',
     title: 'SENTINEL — Global Disease Intelligence Dashboard',
     description:
-      'Live disease outbreak alerts from CDC, PAHO, ECDC and more. Interactive global map, severity rankings, and signal feed updated every 5 minutes.',
-    images: [
-      {
-        url: '/og-image.png',
-        width: 1200,
-        height: 630,
-        alt: 'SENTINEL — Global Disease Intelligence Dashboard',
-      },
-    ],
+      'Live disease outbreak alerts from CDC, PAHO, WHO and more. Interactive global map, severity rankings, and signal feed updated every 5 minutes.',
   },
   twitter: {
     card: 'summary_large_image',
     title: 'SENTINEL — Global Disease Intelligence',
     description: 'Live disease outbreak alerts mapped and ranked in real time.',
-    images: ['/og-image.png'],
   },
   robots: {
     index: true,

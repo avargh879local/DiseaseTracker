@@ -2,6 +2,8 @@ import Dashboard from '@/app/components/Dashboard';
 import { fetchAllSignals } from '@/lib/signals';
 import { SignalsResponse } from '@/app/types';
 
+export const revalidate = 300;
+
 export default async function HomePage() {
   let initialData: SignalsResponse | null = null;
   try {

@@ -138,7 +138,7 @@ export default function Dashboard({ initialData }: { initialData: SignalsRespons
       const src = params.get('source');
       const sev = params.get('severity');
       const q   = params.get('q') || '';
-      const validSources = ['CDC', 'WHO', 'ProMED', 'ReliefWeb', 'PAHO'];
+      const validSources = ['CDC', 'WHO', 'ProMED', 'ReliefWeb', 'PAHO', 'OutbreakNews'];
       const validSeverities = ['high', 'medium', 'low'];
       setFilters({
         source:   (src && validSources.includes(src))    ? src as Source   : 'all',
