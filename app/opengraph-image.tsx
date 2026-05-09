@@ -146,7 +146,7 @@ export default function Image() {
             display: 'flex',
           }}
         >
-          sentinel.convergencecodex.com
+          sentinel-watch.vercel.app
         </div>
       </div>
     ),

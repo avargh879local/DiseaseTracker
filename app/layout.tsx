@@ -1,5 +1,7 @@
 import type { Metadata } from 'next';
 import { Space_Mono, DM_Sans } from 'next/font/google';
+import { Analytics } from '@vercel/analytics/next';
+import { SpeedInsights } from '@vercel/speed-insights/next';
 import './globals.css';
 
 const spaceMono = Space_Mono({
@@ -15,7 +17,7 @@ const dmSans = DM_Sans({
   display: 'swap',
 });
 
-const BASE_URL = 'https://sentinel.convergencecodex.com';
+const BASE_URL = 'https://sentinel-watch.vercel.app';
 
 export const metadata: Metadata = {
   metadataBase: new URL(BASE_URL),
@@ -65,7 +67,11 @@ export const metadata: Metadata = {
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
     <html lang="en" className={`${spaceMono.variable} ${dmSans.variable}`}>
-      <body className="min-h-screen antialiased">{children}</body>
+      <body className="min-h-screen antialiased">
+        {children}
+        <Analytics />
+        <SpeedInsights />
+      </body>
     </html>
   );
 }
