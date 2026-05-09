@@ -146,7 +146,7 @@ export default function Image() {
             display: 'flex',
           }}
         >
-          sentinel-watch.vercel.app
+          sentinelhq.vercel.app
         </div>
       </div>
     ),

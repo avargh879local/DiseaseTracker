@@ -17,7 +17,7 @@ const dmSans = DM_Sans({
   display: 'swap',
 });
 
-const BASE_URL = 'https://sentinel-watch.vercel.app';
+const BASE_URL = 'https://sentinelhq.vercel.app';
 
 export const metadata: Metadata = {
   metadataBase: new URL(BASE_URL),
